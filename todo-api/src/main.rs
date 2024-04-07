@@ -21,7 +21,7 @@ use std::{env, sync::Arc};
 use dotenv::dotenv;
 use hyper::header::CONTENT_TYPE;
 use sqlx::PgPool;
-use tower_http::cors::{Any, CorsLayer, Origin};
+use tower_http::cors::{Any, CorsLayer, AllowOrigin};
 
 #[tokio::main]
 async fn main() {
@@ -42,9 +42,9 @@ async fn main() {
         LabelRepositoryForDb::new(pool.clone()),
     );
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::debug!("listening on {}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+    axum::serve(listener, app.into_make_service())
         .await
         .unwrap();
 }
@@ -71,7 +71,7 @@ fn create_app<Todo: TodoRepository, Label: LabelRepository>(
         .layer(Extension(Arc::new(label_repository)))
         .layer(
             CorsLayer::new()
-                .allow_origin(Origin::exact("http://localhost:3001".parse().unwrap()))
+                .allow_origin(AllowOrigin::exact("http://localhost:3001".parse().unwrap()))
                 .allow_methods(Any)
                 .allow_headers(vec![CONTENT_TYPE]),
         )
@@ -114,7 +114,7 @@ mod test {
     }
 
     async fn res_to_todo(res: Response) -> TodoEntity {
-        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let bytes = hyper::body::Bytes::from(res.into_body());
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
         let todo: TodoEntity = serde_json::from_str(&body)
             .expect(&format!("cannot convert Todo instance. body: {}", body));
@@ -122,7 +122,7 @@ mod test {
     }
 
     async fn res_to_label(res: Response) -> Label {
-        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let bytes = hyper::body::Bytes::from(res.into_body());
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
         let label: Label = serde_json::from_str(&body)
             .expect(&format!("cannot convert Label instance. body: {}", body));
@@ -198,7 +198,7 @@ mod test {
             .oneshot(req)
             .await
             .unwrap();
-        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let bytes = hyper::body::Bytes::from(res.into_body());
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
         let todos: Vec<TodoEntity> = serde_json::from_str(&body)
             .expect(&format!("cannot convert Todo lis instance. body: {}", body));
@@ -283,7 +283,7 @@ mod test {
             .oneshot(req)
             .await
             .unwrap();
-        let bytes = hyper::body::to_bytes(res.into_body()).await.unwrap();
+        let bytes = hyper::body::Bytes::from(res.into_body());
         let body: String = String::from_utf8(bytes.to_vec()).unwrap();
         let labels: Vec<Label> = serde_json::from_str(&body).expect(&format!(
             "cannot convert Label list instance. body: {}",
